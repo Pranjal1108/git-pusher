@@ -1,0 +1,8 @@
+pyautogui>=0.9.54
+pytesseract>=0.3.10
+Pillow>=11.0.0
+gitpython>=3.1.41
+python-dotenv>=1.0.1
+requests>=2.31.0
+colorama>=0.4.6
+pyperclip>=1.8.2
