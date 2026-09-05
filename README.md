@@ -170,7 +170,7 @@ Then run `push.bat` again — it'll ask for your new credentials.
 
 Yes. Your token is saved in a file called `.env` on **your computer only**. It never gets uploaded or shared anywhere. The `.gitignore` file makes sure it's always excluded from any uploads.
 
----
+-------------
 
 ## 📁 What Are All These Files?
 
