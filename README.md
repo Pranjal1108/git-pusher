@@ -8,10 +8,11 @@
 
 This tool takes your project folder and **automatically puts it on GitHub** for you.
 
-It handles everything:
+It handles the routine work:
 - Never used Git before? It sets it up.
 - No GitHub repo yet? It creates one.
-- Something goes wrong mid-push? It fixes it and tries again.
+- If GitHub has newer commits, it pulls them before retrying.
+- It keeps an existing remote intact unless you explicitly choose to replace it.
 
 You don't need to know what `git commit` or `git push` means. You just run this.
 
@@ -19,7 +20,7 @@ You don't need to know what `git commit` or `git push` means. You just run this.
 
 ## 📋 Before You Start (Do This Once)
 
-You need **3 things** installed on your computer. Here's how to get each one:
+You need **2 things** installed on your computer. Here's how to get each one:
 
 ---
 
@@ -40,18 +41,13 @@ You should see something like `Python 3.x.x`
 
 ---
 
-### Thing 2 — Tesseract OCR
+### OCR screen checks — installed automatically
 
-This lets the tool "read" your screen to detect errors.
+GIT PUSHer uses Tesseract to read terminal errors on screen. On Windows, `push.bat` checks for it and installs it automatically through Windows Package Manager the first time it runs.
 
-1. Go to **https://github.com/UB-Mannheim/tesseract/wiki**
-2. Download the Windows installer (the `.exe` file)
-3. Run it and click through — keep all the default settings
-4. It installs to `C:\Program Files\Tesseract-OCR\` — don't change this
+If Windows asks for permission, allow it. If the installation is blocked, the Git push still works; only the optional OCR screen check is skipped. Install **App Installer** from the Microsoft Store and run `push.bat` again to retry.
 
----
-
-### Thing 3 — A GitHub Account
+### Thing 2 — A GitHub Account
 
 If you don't have one:
 1. Go to **https://github.com**
@@ -160,7 +156,7 @@ Then run `push.bat` again — it'll ask for your new credentials.
 |---|---|
 | `Python not found` | Reinstall Python and make sure to check "Add to PATH" |
 | `Token is wrong / access denied` | Run `push.bat --reset` and paste your token again |
-| `Tesseract not found` | Install Tesseract from the link above, keep default path |
+| `OCR engine could not be installed` | Run `push.bat` again and allow the Windows permission prompt. If it persists, install **App Installer** from the Microsoft Store first. Git pushes still work without OCR. |
 | `Push failed after 4 tries` | Check your internet connection, try again |
 | `Merge conflict` | The tool auto-resolves it — your code always wins |
 
@@ -184,3 +180,10 @@ You don't need to touch any of these, but just so you know:
 | `vision_engine.py` | Watches the screen for errors using OCR |
 | `setup_credentials.py` | Manages your saved login info |
 | `.env` | Where your username and token are saved (don't share this file) |
+
+## 🛡️ Safety notes
+
+- Your token is used only for the push and is not written into Git's remote URL. If a prior version saved it there, this version removes it the next time it runs.
+- If a folder already has an `origin` remote, GIT PUSHer uses it instead of silently pointing it somewhere else.
+- To deliberately replace an existing `origin`, pass `--replace-remote` together with `--remote`.
+- Merge conflicts are never force-pushed automatically. The tool stops safely so you can review the conflict.

@@ -132,7 +132,7 @@ def phase_github_repo(repo_name, description, private):
 
 
 # Git Setup Phase
-def phase_git_setup(repo_path, remote_url, branch):
+def phase_git_setup(repo_path, remote_url, branch, replace_remote=False):
     phase("Git Setup")
 
     if not git.is_git_repo(repo_path):
@@ -143,7 +143,9 @@ def phase_git_setup(repo_path, remote_url, branch):
 
     git.configure_identity(repo_path, GITHUB_USERNAME, guess_email())
     git.set_branch(repo_path, branch)
-    git.add_remote(repo_path, remote_url)
+    if not git.add_remote(repo_path, remote_url, replace=replace_remote):
+        print(Fore.RED + "  [FAIL] Remote setup was cancelled to protect the existing destination.")
+        sys.exit(1)
 
 
 # Commit Phase
@@ -182,10 +184,10 @@ def phase_resolve_conflicts(repo_path):
         if ok:
             print(Fore.GREEN + "  [OK] Rebase continued after resolution.")
         else:
-            print(Fore.YELLOW + "  -> Rebase continue failed. Aborting and force pushing...")
+            print(Fore.YELLOW + "  -> Rebase continue failed. Aborting safely.")
             git.abort_rebase(repo_path)
     else:
-        print(Fore.YELLOW + "  -> Trying force push after abort...")
+        print(Fore.YELLOW + "  -> Aborting safely; resolve the conflict before trying again.")
         git.abort_rebase(repo_path)
 
 
@@ -225,6 +227,10 @@ def phase_push(repo_path, branch, remote_url):
 # OCR Screen Monitor
 def phase_ocr_monitor(repo_path):
     phase("OCR Screen Monitor")
+    if not vision.is_tesseract_available():
+        print(Fore.YELLOW + "  [SKIP] OCR engine is unavailable. The Git push was not affected.")
+        print(Fore.YELLOW + "         Run push.bat again to retry its automatic installation.")
+        return ""
     print(Fore.CYAN + "  Scanning screen for errors via OCR...")
     time.sleep(1.5)
 
@@ -269,6 +275,7 @@ def main():
     parser.add_argument("--private",         action="store_true",     help="Create as private repo")
     parser.add_argument("--branch",          default=DEFAULT_BRANCH,  help="Branch name")
     parser.add_argument("--remote",          default="",              help="Existing remote URL (skips repo creation)")
+    parser.add_argument("--replace-remote",  action="store_true",     help="Replace an existing origin remote")
     parser.add_argument("--reset",           action="store_true",     help="Re-enter GitHub credentials")
 
     args = parser.parse_args()
@@ -280,6 +287,8 @@ def main():
     load_config()
 
     repo_path  = str(Path(args.path).resolve())
+    if not Path(repo_path).is_dir():
+        parser.error(f"Project folder does not exist: {repo_path}")
     repo_name  = args.repo or guess_repo_name(repo_path)
     branch     = args.branch
     commit_msg = args.message or f"chore: auto-push [{datetime.now().strftime('%Y-%m-%d %H:%M')}]"
@@ -292,11 +301,16 @@ def main():
     remote_url = args.remote
     html_url   = ""
 
+    existing_remote = git.get_remote_url(repo_path) if git.is_git_repo(repo_path) else ""
+    if existing_remote and not remote_url and not args.replace_remote:
+        remote_url = git.redact_remote_url(existing_remote)
+        print(Fore.YELLOW + f"  Using existing origin: {remote_url}")
+
     if not remote_url:
         clone_url, html_url = phase_github_repo(repo_name, args.description, args.private)
         remote_url = clone_url
 
-    phase_git_setup(repo_path, remote_url, branch)
+    phase_git_setup(repo_path, remote_url, branch, args.replace_remote)
     phase_commit(repo_path, commit_msg)
     push_ok = phase_push(repo_path, branch, remote_url)
     phase_ocr_monitor(repo_path)

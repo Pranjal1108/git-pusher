@@ -2,6 +2,8 @@ import subprocess
 import os
 import sys
 import shutil
+import base64
+from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
 from colorama import Fore, Style, init
 
@@ -14,12 +16,16 @@ def is_git_repo(path):
 
 
 # Run Command
-def run_git(args, cwd, capture=True):
+def run_git(args, cwd, capture=True, env=None):
+    command_env = os.environ.copy()
+    if env:
+        command_env.update(env)
     result = subprocess.run(
         ["git"] + args,
         cwd=cwd,
         capture_output=capture,
-        text=True
+        text=True,
+        env=command_env,
     )
     return result
 
@@ -41,10 +47,43 @@ def has_remote(path):
     return bool(result.stdout.strip())
 
 
+def get_remote_url(path, name="origin"):
+    """Return a remote URL, or an empty string when the remote does not exist."""
+    result = run_git(["remote", "get-url", name], cwd=path)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def redact_remote_url(url):
+    """Remove userinfo from HTTP(S) URLs before displaying or persisting them."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return url
+    host = parsed.hostname
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+
+
 # Add Remote
-def add_remote(path, remote_url):
-    run_git(["remote", "remove", "origin"], cwd=path)
-    result = run_git(["remote", "add", "origin", remote_url], cwd=path)
+def add_remote(path, remote_url, replace=False):
+    existing_url = get_remote_url(path)
+    if existing_url:
+        existing_safe_url = redact_remote_url(existing_url)
+        if existing_safe_url == remote_url:
+            if existing_url != existing_safe_url:
+                # Clean up credentials persisted by older versions of the tool.
+                run_git(["remote", "set-url", "origin", existing_safe_url], cwd=path)
+                print(Fore.GREEN + "  ✓ Removed saved credentials from the existing remote.")
+            print(Fore.GREEN + f"  ✓ Remote already points to: {remote_url}")
+            return True
+        if not replace:
+            print(Fore.YELLOW + "  ⚠ Existing 'origin' was kept to avoid changing its destination.")
+            print(Fore.YELLOW + f"    Current: {existing_safe_url}")
+            print(Fore.YELLOW + "    Use --replace-remote to intentionally change it.")
+            return False
+        result = run_git(["remote", "set-url", "origin", remote_url], cwd=path)
+    else:
+        result = run_git(["remote", "add", "origin", remote_url], cwd=path)
     if result.returncode == 0:
         print(Fore.GREEN + f"  ✓ Remote added: {remote_url}")
         return True
@@ -104,13 +143,16 @@ def set_branch(path, branch_name="main"):
 def push(path, branch="main", token=None, username=None, repo_url=None):
     print(Fore.CYAN + f"[GIT PUSH] Pushing to origin/{branch}...")
 
-    if token and username and repo_url:
-        from urllib.parse import urlparse
-        parsed = urlparse(repo_url)
-        auth_url = f"https://{username}:{token}@{parsed.netloc}{parsed.path}"
-        run_git(["remote", "set-url", "origin", auth_url], cwd=path)
+    # Supply credentials only to this Git process. Persisting tokens in a remote
+    # URL exposes them through `git remote -v` and repository config.
+    env = {"GIT_TERMINAL_PROMPT": "0"}
+    if token:
+        encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
+        env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: basic {encoded}"
 
-    result = run_git(["push", "-u", "origin", branch], cwd=path)
+    result = run_git(["push", "-u", "origin", branch], cwd=path, env=env)
     if result.returncode == 0:
         print(Fore.GREEN + "  ✓ Push successful!")
         return True
@@ -215,9 +257,8 @@ def continue_rebase(path):
 # Abort Rebase
 def abort_rebase(path):
     run_git(["rebase", "--abort"], cwd=path)
-    print(Fore.YELLOW + "  ⚠ Rebase aborted. Force pushing...")
-    result = run_git(["push", "-u", "--force-with-lease", "origin", get_current_branch(path)], cwd=path)
-    return result.returncode == 0
+    print(Fore.YELLOW + "  ⚠ Rebase aborted. No force-push was attempted.")
+    return True
 
 
 # Check Status

@@ -1,6 +1,7 @@
 import os
 import sys
 import requests
+import getpass
 from pathlib import Path
 from colorama import Fore, Style, init, just_fix_windows_console
 
@@ -55,7 +56,7 @@ def verify_token(token):
         else:
             return False, "", f"GitHub API error (Status {r.status_code})."
     except requests.RequestException as e:
-        return True, "", f"Warning: Could not connect to GitHub to verify ({e})."
+        return False, "", f"Could not verify the token because GitHub could not be reached ({e})."
 
 
 # Setup Wizard
@@ -79,7 +80,7 @@ def run_setup():
         print(Fore.WHITE + "  Required scope: 'repo'")
         print(Fore.WHITE + "  (Tip: Paste using Ctrl+V or Right-Click in terminal)")
         
-        token = input(Fore.YELLOW + "  Token > " + Style.RESET_ALL).strip()
+        token = getpass.getpass(Fore.YELLOW + "  Token > " + Style.RESET_ALL).strip()
         if not token:
             print(Fore.RED + "  [!] Token cannot be empty. Please try again.\n")
             continue

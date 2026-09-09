@@ -21,6 +21,18 @@ pyautogui.PAUSE = 0.3
 
 
 # Screenshot Capture
+def is_tesseract_available():
+    """Return whether the Tesseract executable is present and runnable."""
+    executable = pytesseract.pytesseract.tesseract_cmd
+    if not executable or not Path(executable).is_file():
+        return False
+    try:
+        pytesseract.get_tesseract_version()
+        return True
+    except (pytesseract.TesseractNotFoundError, OSError):
+        return False
+
+
 def capture_screen(region=None):
     if region:
         return ImageGrab.grab(bbox=region)
