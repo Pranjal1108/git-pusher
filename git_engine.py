@@ -128,15 +128,37 @@ def get_current_branch(path):
     return result.stdout.strip() or "main"
 
 
-# Set Branch
-def set_branch(path, branch_name="main"):
+# Select or Create Branch
+def ensure_branch(path, branch_name, create_if_missing=False):
+    """Stay on a branch, or safely create/switch to the requested branch."""
+    valid = run_git(["check-ref-format", "--branch", branch_name], cwd=path)
+    if valid.returncode != 0:
+        print(Fore.RED + f"  ✗ Invalid branch name: {branch_name}")
+        return False
+
     current = get_current_branch(path)
-    if current != branch_name:
-        result = run_git(["branch", "-M", branch_name], cwd=path)
-        if result.returncode == 0:
-            print(Fore.GREEN + f"  ✓ Branch set to '{branch_name}'")
-        else:
-            print(Fore.YELLOW + f"  ⚠ Could not rename branch: {result.stderr}")
+    if current == branch_name:
+        print(Fore.GREEN + f"  ✓ Staying on branch '{branch_name}'")
+        return True
+
+    exists = run_git(
+        ["show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"], cwd=path
+    ).returncode == 0
+    if exists:
+        result = run_git(["switch", branch_name], cwd=path)
+        action = "Switched to"
+    elif create_if_missing:
+        result = run_git(["switch", "-c", branch_name], cwd=path)
+        action = "Created and switched to"
+    else:
+        print(Fore.RED + f"  ✗ Branch '{branch_name}' does not exist.")
+        return False
+
+    if result.returncode == 0:
+        print(Fore.GREEN + f"  ✓ {action} branch '{branch_name}'")
+        return True
+    print(Fore.RED + f"  ✗ Could not select branch: {result.stderr}")
+    return False
 
 
 # Push Code

@@ -133,7 +133,7 @@ def phase_github_repo(repo_name, description, private):
 
 
 # Git Setup Phase
-def phase_git_setup(repo_path, remote_url, branch, replace_remote=False):
+def phase_git_setup(repo_path, remote_url, branch, create_branch=False, replace_remote=False):
     phase("Git Setup")
 
     if not git.is_git_repo(repo_path):
@@ -143,7 +143,8 @@ def phase_git_setup(repo_path, remote_url, branch, replace_remote=False):
         print(Fore.GREEN + "  [OK] Already a git repo.")
 
     git.configure_identity(repo_path, GITHUB_USERNAME, guess_email())
-    git.set_branch(repo_path, branch)
+    if not git.ensure_branch(repo_path, branch, create_if_missing=create_branch):
+        sys.exit(1)
     if not git.add_remote(repo_path, remote_url, replace=replace_remote):
         print(Fore.RED + "  [FAIL] Remote setup was cancelled to protect the existing destination.")
         sys.exit(1)
@@ -270,6 +271,33 @@ def print_result(push_ok, html_url, remote_url):
     print(f"{Fore.CYAN}{'='*55}\n")
 
 
+def choose_branch(repo_path, args):
+    """Offer a branch before changing an existing project, without being noisy."""
+    existing_repo = git.is_git_repo(repo_path)
+    current_branch = git.get_current_branch(repo_path) if existing_repo else DEFAULT_BRANCH
+
+    if args.new_branch:
+        return args.new_branch.strip(), True
+    if args.branch:
+        # An explicit command-line branch is intentional; create it if needed.
+        return args.branch.strip(), True
+    if not existing_repo:
+        return DEFAULT_BRANCH, True
+    if args.no_branch_prompt:
+        return current_branch, False
+
+    print(Fore.CYAN + f"\n  Current branch: {Fore.WHITE}{current_branch}")
+    choice = input(Fore.YELLOW + "  Create a separate branch for this update? (y/N): " + Style.RESET_ALL).strip().lower()
+    if choice not in {"y", "yes"}:
+        return current_branch, False
+
+    suggested = f"update-{datetime.now().strftime('%Y%m%d-%H%M')}"
+    branch_name = input(
+        Fore.YELLOW + f"  New branch name [{suggested}]: " + Style.RESET_ALL
+    ).strip() or suggested
+    return branch_name, True
+
+
 # Main Entry
 def main():
     print_banner()
@@ -283,7 +311,9 @@ def main():
     parser.add_argument("-r", "--repo",      default="",              help="Repo name (default: folder name)")
     parser.add_argument("-d", "--description", default="",            help="Repo description")
     parser.add_argument("--private",         action="store_true",     help="Create as private repo")
-    parser.add_argument("--branch",          default=DEFAULT_BRANCH,  help="Branch name")
+    parser.add_argument("--branch",          default="",              help="Use this branch (create it if needed)")
+    parser.add_argument("--new-branch",      default="",              help="Create a new branch without prompting")
+    parser.add_argument("--no-branch-prompt", action="store_true",    help="Keep the current branch without asking")
     parser.add_argument("--remote",          default="",              help="Existing remote URL (skips repo creation)")
     parser.add_argument("--replace-remote",  action="store_true",     help="Replace an existing origin remote")
     parser.add_argument("--reset",           action="store_true",     help="Re-enter GitHub credentials")
@@ -294,13 +324,16 @@ def main():
         creds.reset()
         sys.exit(0)
 
-    load_config()
-
     repo_path  = str(Path(args.path).resolve())
     if not Path(repo_path).is_dir():
         parser.error(f"Project folder does not exist: {repo_path}")
+    branch, create_branch = choose_branch(repo_path, args)
+    if not branch:
+        parser.error("Branch name cannot be empty.")
+
+    load_config()
+
     repo_name  = args.repo or guess_repo_name(repo_path)
-    branch     = args.branch
     commit_msg = args.message or f"chore: auto-push [{datetime.now().strftime('%Y-%m-%d %H:%M')}]"
 
     print(Fore.CYAN + f"\n  Project : {repo_path}")
@@ -320,7 +353,7 @@ def main():
         clone_url, html_url = phase_github_repo(repo_name, args.description, args.private)
         remote_url = clone_url
 
-    phase_git_setup(repo_path, remote_url, branch, args.replace_remote)
+    phase_git_setup(repo_path, remote_url, branch, create_branch, args.replace_remote)
     commit_result = phase_commit(repo_path, commit_msg)
     if commit_result == "blocked":
         print(Fore.RED + "\n  [STOPPED] No commit or push was performed to protect your credentials.\n")

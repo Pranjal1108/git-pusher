@@ -112,6 +112,8 @@ Enter project path (or . for current dir): C:\Users\You\Desktop\MyProject
 Commit message (leave blank for auto):     added login page
 ```
 
+For an existing Git project, it then asks one short safety question: whether to keep using the current branch or create a separate branch for the update. Choose `N` (or press Enter) to use the current branch; choose `Y` to name a new branch.
+
 And watch it do everything automatically. ✅
 
 ---
@@ -136,6 +138,16 @@ push.bat "C:\MyProject" -m "fixed the bug"
 **Make the repo private:**
 ```
 push.bat "C:\MyProject" --private
+```
+
+**Create a separate branch without being asked:**
+```
+push.bat "C:\MyProject" --new-branch "update-login-page"
+```
+
+**For an automated script, keep the current branch without a prompt:**
+```
+push.bat "C:\MyProject" --no-branch-prompt
 ```
 
 ---
