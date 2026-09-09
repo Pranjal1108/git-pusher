@@ -15,6 +15,7 @@ init(autoreset=True)
 import git_engine as git
 import vision_engine as vision
 import setup_credentials as creds
+import security_engine as security
 
 DEFAULT_BRANCH = "main"
 MAX_RETRIES    = 4
@@ -160,6 +161,15 @@ def phase_commit(repo_path, commit_message):
     print(Fore.CYAN + "  Changed files:")
     for line in status.splitlines():
         print(Fore.WHITE + f"    {line}")
+
+    findings = security.find_secrets(repo_path)
+    if findings:
+        print(Fore.RED + "\n  [BLOCKED] Possible credentials were found. Nothing was staged.")
+        for file_path, credential_type in findings:
+            print(Fore.RED + f"    {file_path} ({credential_type})")
+        print(Fore.YELLOW + "  Move the credential to .env, then try again.")
+        print(Fore.YELLOW + "  Its value was not displayed or saved by GIT PUSHer.")
+        return "blocked"
 
     if not git.stage_all(repo_path):
         sys.exit(1)
@@ -311,7 +321,10 @@ def main():
         remote_url = clone_url
 
     phase_git_setup(repo_path, remote_url, branch, args.replace_remote)
-    phase_commit(repo_path, commit_msg)
+    commit_result = phase_commit(repo_path, commit_msg)
+    if commit_result == "blocked":
+        print(Fore.RED + "\n  [STOPPED] No commit or push was performed to protect your credentials.\n")
+        return
     push_ok = phase_push(repo_path, branch, remote_url)
     phase_ocr_monitor(repo_path)
     print_result(push_ok, html_url, remote_url)

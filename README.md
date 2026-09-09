@@ -166,6 +166,12 @@ Then run `push.bat` again — it'll ask for your new credentials.
 
 Yes. Your token is saved in a file called `.env` on **your computer only**. It never gets uploaded or shared anywhere. The `.gitignore` file makes sure it's always excluded from any uploads.
 
+### Sharing this project safely
+
+You can now push this entire project folder to GitHub. The real `.env` file, private keys, common credential files, the virtual environment, and screenshots are excluded automatically. A safe `.env.example` template is included instead.
+
+Before each commit, GIT PUSHer scans changed files for common GitHub, AWS, Google, and private-key credential formats. If it finds one, it blocks the commit, shows only the file and credential type, and tells you to move the value into `.env`. This provides a second safety net even if a sensitive file was force-added to Git.
+
 -------------
 
 ## 📁 What Are All These Files?
